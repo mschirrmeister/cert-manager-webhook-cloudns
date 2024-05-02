@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-acme/lego/platform/config/env"
-	"github.com/ixoncloud/cert-manager-webhook-cloudns/cloudns/internal"
+	"github.com/mschirrmeister/cert-manager-webhook-cloudns/cloudns/internal"
 )
 
 // Config is used to configure the creation of the DNSProvider
