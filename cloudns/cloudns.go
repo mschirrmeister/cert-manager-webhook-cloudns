@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-acme/lego/platform/config/env"
+	"github.com/go-acme/lego/v4/platform/config/env"
 	"github.com/mschirrmeister/cert-manager-webhook-cloudns/cloudns/internal"
 )
 
