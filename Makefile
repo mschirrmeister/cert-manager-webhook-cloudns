@@ -1,5 +1,5 @@
 IMAGE_NAME := "mschirrmeister/cert-manager-webhook-cloudns"
-IMAGE_TAG := "1.1.0"
+IMAGE_TAG := "1.1.1"
 
 OUT := $(shell pwd)/.out
 
