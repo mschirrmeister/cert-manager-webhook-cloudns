@@ -32,7 +32,7 @@ jobs:
         id: meta
         uses: crazy-max/ghaction-docker-meta@v2
         with:
-          images: mschirrmeister/cert-manager-webhook-cloudns
+          images: ${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}
           tags: |
             type=raw,value=latest,enable=${{ endsWith(GitHub.ref, 'master') }}
             type=ref,event=tag
@@ -64,6 +64,6 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: mschirrmeister/cert-manager-webhook-cloudns:${{ steps.vars.outputs.tag }}
+          tags: ${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}:${{ steps.vars.outputs.tag }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache

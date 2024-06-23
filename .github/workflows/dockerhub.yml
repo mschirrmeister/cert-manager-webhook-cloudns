@@ -11,7 +11,7 @@ on:  # yamllint disable-line rule:truthy
       - dev
 
 env:
-  REGISTRY_IMAGE: mschirrmeister/cert-manager-webhook-cloudns
+  REGISTRY_IMAGE: ${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}
 
 jobs:
   prepare:
@@ -40,8 +40,8 @@ jobs:
           images: |
             ${{ env.REGISTRY_IMAGE }}
           labels: |
-            org.opencontainers.image.title=docker-speedtest-grafana
-            org.opencontainers.image.description=Speedtest monitoring and visualizing results in Grafana
+            org.opencontainers.image.title=cert-manager-webhook-cloudns
+            org.opencontainers.image.description=cert-manager webhook ClouDNS
             org.opencontainers.image.vendor=mschirrmeister
 
       - name: Rename meta bake definition file
