@@ -5,7 +5,7 @@ RUN apk add --no-cache git
 WORKDIR /workspace
 ENV GO111MODULE=on
 
-RUN git clone --single-branch --branch cm-115 https://github.com/mschirrmeister/dockertest .
+RUN git clone --single-branch --branch cm-115 https://github.com/mschirrmeister/cert-manager-webhook-cloudns .
 
 COPY go.mod .
 COPY go.sum .
