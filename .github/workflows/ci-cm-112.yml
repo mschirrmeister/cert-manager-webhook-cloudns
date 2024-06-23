@@ -1,0 +1,73 @@
+name: ci-cm-112
+
+on:
+  push:
+    paths-ignore:
+      - '**/README.md'
+    branches:
+      - 'cm-112'
+    tags:
+      # - '*' # Push events to matching *, i.e. 1.0.0 v1.0, v20.15.10
+      - '1.0.*-cm-1.12.*'
+      - 'v1.0.*-cm-1.12.*'
+      
+  pull_request:
+    branches:
+      - "cm-112/**"
+    paths-ignore:
+      - '**/README.md'
+    types: # https://docs.github.com/actions/using-workflows/events-that-trigger-workflows#pull_request
+      - opened
+      - reopened
+      - closed
+    # branches:
+    #   - 'main'
+    #   - 'release-*'
+    #   - 'DOC-*'
+    #   - 'hotfix-*'
+
+permissions: # https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+  contents: write
+  discussions: write
+  packages: write
+
+jobs:
+  ### deploy tag start
+
+  docker-bake-alpine-all-tag:
+    name: docker-bake-alpine-all-tag
+    uses: ./.github/workflows/docker-buildx-bake-cm-112-hubdocker-tag.yml
+    if: startsWith(github.ref, 'refs/tags/')
+    with:
+      docker_bake_targets: 'image-alpine'
+      docker-metadata-flavor-suffix: '-alpine' # default is '', can add as: -alpine -debian
+      # push_remote_flag: true # default is true
+    secrets:
+      DOCKERHUB_TOKEN: "${{ secrets.DOCKERHUB_TOKEN }}"
+
+  docker-bake-debian-all-tag:
+    name: docker-bake-debian-all-tag
+    uses: ./.github/workflows/docker-buildx-bake-cm-112-hubdocker-tag.yml
+    if: startsWith(github.ref, 'refs/tags/')
+    with:
+      docker_bake_targets: 'image-debian'
+      docker-metadata-flavor-suffix: '-debian' # default is '', can add as: -alpine -debian
+      # push_remote_flag: true # default is true
+    secrets:
+      DOCKERHUB_TOKEN: "${{ secrets.DOCKERHUB_TOKEN }}"
+
+  docker-bake-all-tag:
+    name: docker-bake-all-tag
+    needs:
+      - docker-bake-alpine-all-tag
+      - docker-bake-debian-all-tag
+    uses: ./.github/workflows/docker-buildx-bake-cm-112-hubdocker-tag.yml
+    if: startsWith(github.ref, 'refs/tags/')
+    with:
+      docker_bake_targets: 'image-basic'
+      docker-metadata-flavor-suffix: '' # default is '', can add as: -alpine -debian
+      # push_remote_flag: true # default is true
+    secrets:
+      DOCKERHUB_TOKEN: "${{ secrets.DOCKERHUB_TOKEN }}"
+
+  ### deploy tag end
