@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.4
 
 require (
-	github.com/cert-manager/cert-manager v1.12.11
+	github.com/cert-manager/cert-manager v1.14.6
 	github.com/go-acme/lego/v4 v4.17.4
 	github.com/stretchr/testify v1.9.0
 	k8s.io/client-go v0.30.1
@@ -102,7 +102,6 @@ require (
 	k8s.io/component-base v0.30.1 // indirect
 	k8s.io/klog/v2 v2.120.1 // indirect
 	k8s.io/kms v0.30.1 // indirect
-	k8s.io/kube-aggregator v0.27.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20240430033511-f0e62f92d13f // indirect
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.30.3 // indirect
