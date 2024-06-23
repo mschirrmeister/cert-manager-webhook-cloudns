@@ -1,0 +1,260 @@
+## will push to dockerhub
+# this is a workflow must add
+# - variables `ENV_DOCKERHUB_OWNER` user of docker hub
+# - variables `ENV_DOCKERHUB_REPO_NAME` repo name of docker hub
+# - secrets `DOCKERHUB_TOKEN` token of docker hub user from [hub.docker](https://hub.docker.com/settings/security)
+# add config file at `./docker-bake.hcl` or change input `docker_bake_config_file_path`
+# most use as: startsWith(github.ref, 'refs/tags/')
+
+name: docker-buildx-bake-cm-115-hubdocker-tag
+
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}-docker-buildx-bake-${{ vars.ENVIRONMENT_CM_115 }}-hubdocker-${{ inputs.docker_bake_targets }}-tag
+#   cancel-in-progress: false
+
+
+on:
+  workflow_call: # https://docs.github.com/actions/using-workflows/reusing-workflows#using-inputs-and-secrets-in-a-reusable-workflow
+    inputs:
+      push_remote_flag:
+        description: 'flag for push to remote'
+        default: true
+        required: false
+        type: boolean
+      docker_bake_targets:
+        description: 'docker bake targets'
+        default: 'image-basic'
+        required: false
+        type: string
+      docker-metadata-flavor-suffix:
+        description: 'docker metadata flavor suffix just like: -alpine -debian'
+        default: ''
+        required: false
+        type: string
+      docker_bake_matrix_target_postfix:
+        description: 'docker build matrix target postfix'
+        default: '-all'
+        required: false
+        type: string
+      docker_bake_config_file_path:
+        description: 'docker-bake file name'
+        default: './docker-bake-cm-115.hcl'
+        required: false
+        type: string
+      docker-build-no-cache:
+        description: 'docker build no cache'
+        default: false
+        required: false
+        type: boolean
+    secrets:
+      DOCKERHUB_TOKEN:
+        description: 'docker hub token'
+        required: false
+
+permissions: # https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+  contents: write
+  discussions: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.platforms.outputs.matrix }}
+    steps:
+
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Create matrix
+        id: platforms
+        run: |
+          echo "matrix=$(docker buildx bake --file ${{ inputs.docker_bake_config_file_path }} ${{ inputs.docker_bake_targets }}${{inputs.docker_bake_matrix_target_postfix}} --print | jq -cr '.target."${{ inputs.docker_bake_targets }}${{inputs.docker_bake_matrix_target_postfix}}".platforms')" >>${GITHUB_OUTPUT}
+      -
+        name: Show matrix
+        run: |
+          echo ${{ steps.platforms.outputs.matrix }}
+
+
+  build:
+    runs-on: ubuntu-latest
+    # environment: ${{ vars.ENVIRONMENT_CM_115 }}
+    needs:
+      - prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+
+      -
+        name: Prepare build
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}
+          tags: |
+            # type semver https://github.com/docker/metadata-action#typesemver
+            type=semver,pattern={{version}}
+          flavor: |
+            latest=false
+            suffix=${{ inputs.docker-metadata-flavor-suffix }}
+
+      -
+        name: Rename meta bake definition file
+        run: |
+          mkdir -p "${{ runner.temp }}/${{ inputs.docker_bake_targets}}"
+          mv "${{ steps.meta.outputs.bake-file }}" "${{ runner.temp }}/${{ inputs.docker_bake_targets}}/bake-meta.json"
+
+      -
+        name: Upload meta bake definition
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.push_remote_flag }}
+        with:
+          name: bake-tag-meta-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.docker_bake_targets }}-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/bake-meta.json
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 1
+
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container # `docker-container` is default
+          # buildkitd-flags: "--debug" # open buildkitd flags
+
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        if: ${{ inputs.push_remote_flag }}
+        with:
+          username: ${{ vars.ENV_DOCKERHUB_OWNER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      -
+        name: Build
+        id: bake
+        uses: docker/bake-action@v4
+        with:
+          files: |
+            ${{ inputs.docker_bake_config_file_path }}
+            ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/bake-meta.json
+          targets: ${{ inputs.docker_bake_targets }}
+          no-cache: ${{ inputs.docker-build-no-cache }}
+          provenance: false
+          sbom: false
+          push: ${{ inputs.push_remote_flag }}
+          set: |
+            *.tags=
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=build-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=build-${{ env.PLATFORM_PAIR }}
+            *.output=type=image,"name=${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}",push-by-digest=true,name-canonical=true
+
+      - name: Extract container image digest from bake output
+        id: bake-output-container-image-digest
+        run: |
+          echo "digest=$(echo '${{ steps.bake.outputs.metadata}}' | jq -cr '.["${{ inputs.docker_bake_targets }}"]["containerimage.digest"]')" >>$GITHUB_OUTPUT
+
+      -
+        name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests
+          digest="${{ steps.bake-output-container-image-digest.outputs.digest }}"
+          touch "${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/${digest#sha256:}"
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests
+
+      -
+        name: Upload digest
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.push_remote_flag }}
+        with:
+          name: digests-tag-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.docker_bake_targets }}-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/*
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 1
+
+      -
+        name: check temp config files
+        run: |
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/
+
+
+  merge:
+    runs-on: ubuntu-latest
+    # environment: ${{ vars.ENVIRONMENT_CM_115 }}
+    if: ${{ inputs.push_remote_flag }}
+    needs:
+      - build
+    steps:
+
+      -
+        name: check temp path
+        run: |
+          mkdir -p ${{ runner.temp }}/${{ inputs.docker_bake_targets}}
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}
+
+      -
+        name: Download meta bake definition
+        uses: actions/download-artifact@v4
+        with:
+          # name: bake-meta
+          ## https://github.com/actions/download-artifact/tree/v4?tab=readme-ov-file#breaking-changes
+          pattern: bake-tag-meta-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.docker_bake_targets }}-*
+          path: ${{ runner.temp }}/${{ inputs.docker_bake_targets}}
+          merge-multiple: true
+
+      -
+        name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          # name: digests
+          ## https://github.com/actions/download-artifact/tree/v4?tab=readme-ov-file#breaking-changes
+          pattern: digests-tag-${{ github.run_id }}-${{ github.run_attempt }}-${{ inputs.docker_bake_targets }}-*
+          path: ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/
+          merge-multiple: true
+
+      -
+        name: check temp config files
+        run: |
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}
+          ls -al ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/
+
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.ENV_DOCKERHUB_OWNER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      -
+        name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/digests/
+        run: |
+          docker buildx imagetools create $(jq -cr '.target."docker-metadata-action".tags | map(select(startswith("${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}")) | "-t " + .) | join(" ")' ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/bake-meta.json) \
+            $(printf '${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}@sha256:%s ' *)
+      -
+        name: Inspect image
+        run: |
+          tag=$(jq -r '.target."docker-metadata-action".args.DOCKER_META_VERSION' ${{ runner.temp }}/${{ inputs.docker_bake_targets}}/bake-meta.json)
+          docker buildx imagetools inspect ${{ vars.ENV_DOCKERHUB_OWNER }}/${{ vars.ENV_DOCKERHUB_REPO_NAME }}:${tag}
