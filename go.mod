@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.4
 
 require (
-	github.com/cert-manager/cert-manager v1.14.6
+	github.com/cert-manager/cert-manager v1.14.7
 	github.com/go-acme/lego/v4 v4.17.4
 	github.com/stretchr/testify v1.9.0
 	k8s.io/client-go v0.30.1
